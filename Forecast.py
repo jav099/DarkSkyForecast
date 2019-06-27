@@ -21,7 +21,7 @@ class ApiRequest:
         #request has to be in format https://api.darksky.net/forecast/[key]/[latitude],[longitude]
         #excluding several blocks to reduce latency. Extending the hourly request from 48 to 168 hours
         self.optionalParams = "?exclude=currently,minutely,alerts,flags&extend=hourly"
-        self.location = {"latitude": "19.3599300", "longitude": "-99.2938800", "cluster": "Cuajimalpa"}
+        self.location = {"latitude": "18.9261000", "longitude": "-99.2307500", "cluster": "Cuernavaca"}
         self.response = requests.get(self.apiCall + self.key + "/" + self.location["latitude"] + "," + self.location["longitude"] + self.optionalParams)
         #this Dict has format [time : temperature] with time as YYYY-MM-DD HH:MM:SS
         self.next168Hours = {}
