@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import datetime
 import requests
-import json
 
 
 """
@@ -20,6 +19,7 @@ class ApiRequest:
         self.apiCall = "https://api.darksky.net/forecast/"
         #coordinates = Cuajimalpa
         #request has to be in format https://api.darksky.net/forecast/[key]/[latitude],[longitude]
+        #excluding several blocks to reduce latency. Extending the hourly request from 48 to 168 hours
         self.optionalParams = "?exclude=currently,minutely,alerts,flags&extend=hourly"
         self.location = {"latitude": "19.3599300", "longitude": "-99.2938800", "cluster": "Cuajimalpa"}
         self.response = requests.get(self.apiCall + self.key + "/" + self.location["latitude"] + "," + self.location["longitude"] + self.optionalParams)
@@ -40,7 +40,6 @@ class ApiRequest:
         data = self.response.json()
         hourly = data["hourly"]
         data = hourly["data"]
-        print(len(data))
         for i in range(168):
             hourData = data[i]
             self.next168Hours[convertTime(hourData["time"])] = tempConverter(hourData["temperature"])
@@ -51,14 +50,20 @@ class Prediction():
     """
     Requires: a valid ApiRequest instance
     Modifies: nothing
-    Effects: initializes member dictionary with all the keys
+    Effects: initializes member dictionary with all the keys, and makes all the calls to the member functions that do
+            most of the setup
     """
     def __init__(self,apiRequest):
+        #simply a copy of the dictionary containing the hourly temperature for the next 168 hours (2 weeks)
         self.next2WeeksTemp = apiRequest.next168Hours
+        # Dictionary which contains 24 hours of the day as keys, and as values has the average temperature for that hour
+        # averaged from the values in next2WeeksTemp
         self.averageTempByHour = {}
         self.fillTime()
         self.calcAveragePerHour()
+        # A list containing only the hour values of the averageTempByHour dictionary
         self.hourArray = []
+        # A list containing only the temperature values contained in the averageTempByHour dictionary
         self.avgTempArray = []
         self.fillArrays()
 
@@ -75,9 +80,9 @@ class Prediction():
 
 
     """
-    Requires: date is a date string of format YYYY,MM,DD HH:MM:SS
+    Requires: date is a date string of format YYYY,MM,DD HH:MM
     Modifies: nothing
-    Effects: returns only the HH:MM:SS part as string
+    Effects: returns only the HH:MM:SS part of the time as a string
     """
     def splitDate(self,date):
         timeArr = date.split(" ")
@@ -92,6 +97,7 @@ class Prediction():
     def calcAveragePerHour(self):
         for hourKey in self.averageTempByHour:
             for dateKey in self.next2WeeksTemp:
+                #looks through all the days, thus there are multiple instances of the same hour.
                 if(self.splitDate(dateKey) == hourKey):
                     self.averageTempByHour[hourKey] += self.next2WeeksTemp[dateKey]
         for key in self.averageTempByHour:
@@ -100,9 +106,9 @@ class Prediction():
             self.averageTempByHour[key] /= 7
 
     """
-    Requires: 
-    Modifies:
-    Effects:
+    Requires: averageTempByHour is correctly filled
+    Modifies: avgTempArray and hourArray
+    Effects: fills hourArray using the keys from averageTempByHour and fills avgTempArray using the values from avgTempByHour
     """
     def fillArrays(self):
         for hour in self.averageTempByHour:
@@ -111,16 +117,13 @@ class Prediction():
 
 
 
-
-
-
 """
 Requires: time is a UNIX time as string
 Modifies: nothing
-Effects: returns the time as YYYY,MM,DD HH:MM:SS
+Effects: returns the time as YYYY,MM,DD HH:MM
 """
 def convertTime(time):
-    newTime = datetime.datetime.fromtimestamp(int(time)).strftime('%Y,%m,%d %H:%M:%S')
+    newTime = datetime.datetime.fromtimestamp(int(time)).strftime('%Y,%m,%d %H:%M')
     return newTime
 
 """
@@ -132,13 +135,23 @@ def tempConverter(ftemp):
     ctemp = (int(ftemp) - 32) * (5/9)
     return ctemp
 
+"""
+Requires: Prediction and ApiRequest objects have been created error-free beforehand
+Modifies: Nothing
+Effects: Creates a csv file with hour,temp (predicted temperature in °C).
+"""
+def csvOutput(pred,req):
+    # using this style for opening guarantees that the file will be closed
+    with open("csvPrediction.txt","w") as csvFile:
+        csvFile.write("hour,temperature" + "\n")
+        for key in pred.averageTempByHour:
+            csvFile.write(key + "," + str(pred.averageTempByHour[key]) + "\n")
+
 
 def main():
     """
     plt setup ahead
     """
-
-
     ##############
     # Get current size
     fig_size = plt.rcParams["figure.figsize"]
@@ -147,20 +160,13 @@ def main():
 
     fig_size[0] = 18
     fig_size[1] = 15
+    #New Size is [18, 15]
     plt.rcParams["figure.figsize"] = fig_size
-    # Get current size
-    fig_size = plt.rcParams["figure.figsize"]
-
-    # New Size is: [12, 9]
-
     #############
 
-
     req = ApiRequest()
-    print(len(req.next168Hours))
     #print(req.next168Hours)
     pred = Prediction(req)
-    print(pred.averageTempByHour)
 
     chartLabel = "Prediction of hourly temperature for a day"
 
@@ -172,8 +178,8 @@ def main():
     plt.ylabel("Temperature (°C)", fontsize=14)
     plt.savefig("FirstTest.png")
 
-
-
+    #creating the csvFile
+    csvOutput(pred, req)
 
 
 if __name__ == '__main__':
