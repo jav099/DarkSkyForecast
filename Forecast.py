@@ -44,6 +44,56 @@ class ApiRequest:
             hourData = data[i]
             self.next168Hours[convertTime(hourData["time"])] = tempConverter(hourData["temperature"])
 
+    """
+    TEST FUNCTION
+    """
+    def TESTRounding(self):
+        testFile = open("testFile.txt","w")
+        data = self.response.json()
+        hourly = data["hourly"]
+        data = hourly["data"]
+        testDict = {}
+        tempByHour = {}
+        for i in range(168):
+            hourData = data[i]
+            testDict[convertTime(hourData["time"])] = tempConverter(hourData["temperature"])
+
+        # write to file the dictionary with every hour : temp
+        for key in testDict:
+            testFile.write(str(key) + ": ")
+            testFile.write(str(testDict[key]) + "\n")
+
+        # Fill temp by hour with all hours as keys (0-24)
+        for key in testDict:
+            timeKey = splitDate(key)
+            tempByHour[timeKey] = 0
+
+        total = 0
+        # add to a specific hour all the temperatures associated with that hour
+        for hourKey in tempByHour:
+            for dateKey in testDict:
+                #looks through all the days, thus there are multiple instances of the same hour.
+                if(splitDate(dateKey) == hourKey):
+                    tempByHour[hourKey] += testDict[dateKey]
+
+        #gets the average for 16:00
+        for key in tempByHour:
+            if (key == "16:00"):
+                total += tempByHour[key]
+
+       print("TEMPERATURES AT 16:00 FOR THE NEXT 7 DAYS")
+       for key in testDict:
+            if("16:00" in key):
+                # temperatures for 16:00
+                print("***" + str(testDict[key]))
+
+        avg = total / 7
+        print("AVG:")
+        print(avg)
+
+
+
+
 
 
 class Prediction():
@@ -75,19 +125,10 @@ class Prediction():
     """
     def fillTime(self):
         for key in self.next2WeeksTemp:
-            timeKey = self.splitDate(key)
+            timeKey = splitDate(key)
             self.averageTempByHour[timeKey] = 0
 
 
-    """
-    Requires: date is a date string of format YYYY,MM,DD HH:MM
-    Modifies: nothing
-    Effects: returns only the HH:MM:SS part of the time as a string
-    """
-    def splitDate(self,date):
-        timeArr = date.split(" ")
-        time = timeArr[1]
-        return time
 
     """
     Requires: The member dictionaries are correctly filled
@@ -98,11 +139,10 @@ class Prediction():
         for hourKey in self.averageTempByHour:
             for dateKey in self.next2WeeksTemp:
                 #looks through all the days, thus there are multiple instances of the same hour.
-                if(self.splitDate(dateKey) == hourKey):
+                if(splitDate(dateKey) == hourKey):
                     self.averageTempByHour[hourKey] += self.next2WeeksTemp[dateKey]
         for key in self.averageTempByHour:
             #the data is of seven days, which is why to get the average it is divided by 7
-            print(self.averageTempByHour[key])
             self.averageTempByHour[key] /= 7
 
     """
@@ -114,6 +154,17 @@ class Prediction():
         for hour in self.averageTempByHour:
             self.hourArray.append(hour)
             self.avgTempArray.append(self.averageTempByHour[hour])
+
+"""
+Requires: date is a date string of format YYYY,MM,DD HH:MM
+Modifies: nothing
+Effects: returns only the HH:MM:SS part of the time as a string
+"""
+def splitDate(date):
+    timeArr = date.split(" ")
+    time = timeArr[1]
+    return time
+
 
 
 
@@ -165,6 +216,8 @@ def main():
     #############
 
     req = ApiRequest()
+    req.TESTRounding()
+
     #print(req.next168Hours)
     pred = Prediction(req)
 
@@ -176,7 +229,7 @@ def main():
     plt.plot(xAxis, yAxis)
     plt.xlabel("Hour", fontsize=14)
     plt.ylabel("Temperature (°C)", fontsize=14)
-    plt.savefig("FirstTest.png")
+    plt.savefig("predictionGraph.png")
 
     #creating the csvFile
     csvOutput(pred, req)
