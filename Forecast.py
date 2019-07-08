@@ -14,7 +14,7 @@ class ApiRequest:
     Modifies: Self.
     Effects: Makes the Dark Sky call and sets the member variables.
     """
-    def __init__(self):
+    def __init__(self,latitude,longitude):
         self.key = "2fecc76215ad344d79970e5a78e94f84"
         #returns todays date in format YYYY-MM-DD HH:MM:SS
         self.currentDate = datetime.datetime.today()
@@ -23,8 +23,9 @@ class ApiRequest:
         #request has to be in format https://api.darksky.net/forecast/[key]/[latitude],[longitude]
         #excluding several blocks to reduce latency. Extending the hourly request from 48 to 168 hours
         self.optionalParams = "?exclude=currently,minutely,alerts,flags&extend=hourly"
-        self.location = {"latitude": "18.9261000", "longitude": "-99.2307500", "cluster": "Cuernavaca"}
-        self.response = requests.get(self.apiCall + self.key + "/" + self.location["latitude"] + "," + self.location["longitude"] + self.optionalParams)
+        #cuernavaca has coords 18.9261000,-99.2307500
+        self.location = {"latitude": latitude, "longitude": longitude, "cluster": "Cuernavaca"}
+        self.response = requests.get(self.apiCall + self.key + "/" + str(self.location["latitude"]) + "," + str(self.location["longitude"]) + self.optionalParams)
         #this Dict has format [time : temperature] with time as YYYY-MM-DD HH:MM:SS
         self.next168Hours = {}
         self.forecast()
@@ -156,6 +157,17 @@ class Prediction():
             self.hourArray.append(hour)
             self.avgTempArray.append(self.averageTempByHour[hour])
 
+    """
+    Requires: Nothing
+    Modifies: Nothing
+    Effects: Returns the dictionary with average temps
+    """
+    def returnDictWithAvgs(self):
+        return self.averageTempByHour
+
+    def sortAvgTempByHour(self):
+        return sorted(self.averageTempByHour.items())
+
 class timeMachineRequest:
     def __init__(self):
         self.key = "2fecc76215ad344d79970e5a78e94f84"
@@ -259,6 +271,9 @@ class timeMachineRequest:
 
 
 
+
+
+
 """
 Requires: date is a date string of format YYYY,MM,DD HH:MM
 Modifies: nothing
@@ -305,7 +320,7 @@ Requires: Prediction and ApiRequest objects have been created error-free beforeh
 Modifies: Nothing
 Effects: Creates a csv file with hour,temp (predicted temperature in °C).
 """
-def csvOutput(pred,req):
+def csvOutput(pred):
     # using this style for opening guarantees that the file will be closed
     # items() returns a list of key value tuples
     sortedDict = sorted(pred.averageTempByHour.items())
@@ -313,6 +328,131 @@ def csvOutput(pred,req):
         csvFile.write("hour,temperature" + "\n")
         for key in sortedDict:
             csvFile.write(key[0] + "," + str(key[1]) + "\n")
+
+
+"""
+Requires: coordList is a list of the epicenters' coordinates as a tuple of lat,longitude
+Modifies: Nothing
+Effects: returns a list of dictionaries containing the average temp per hour for each epicenter (coord pair). Sorts the
+        dicts before returning.
+"""
+def compareEpicenters(coordList):
+    averageDictList = []
+    northEpicenterRequest = ApiRequest(coordList[0][0],coordList[0][1])
+    northEpicenterPrediction = Prediction(northEpicenterRequest)
+    northEpicenterDict = sorted(northEpicenterPrediction.returnDictWithAvgs().items())
+    centralEpicenterRequest =  ApiRequest(coordList[1][0],coordList[1][1])
+    centralEpicenterPrediction = Prediction(centralEpicenterRequest)
+    centralEpicenterDict = sorted(centralEpicenterPrediction.returnDictWithAvgs().items())
+    southEpicenterRequest = ApiRequest(coordList[2][0],coordList[2][1])
+    southEpicenterPrediction = Prediction(southEpicenterRequest)
+    southEpicenterDict = sorted(southEpicenterPrediction.returnDictWithAvgs().items())
+
+    averageDictList.append(northEpicenterDict)
+    averageDictList.append(centralEpicenterDict)
+    averageDictList.append(southEpicenterDict)
+    return averageDictList
+
+
+
+"""
+Requires: epicentersAvgList is a list of list with tuples containing hour,temp for that location
+            (list is ordered as North, Central, South) 
+Modifies: nothing
+Effects: returns a list of three distinct dictionaries, each dictionary will "compare" two different epicenters and have
+        as key the hour and as value the difference in avg temp for that hour between both epicenters
+"""
+def takeDif(epicentersAvgList):
+    difDictsList = []
+
+    #NorthCenter
+    northArray = []
+    centerArray = []
+    northCenterDifList = []
+    northCenterCompDict = {}
+    for i in range(len(epicentersAvgList[0])):
+        northArray.append(epicentersAvgList[0][i][1])
+    for i in range(len(epicentersAvgList[1])):
+        centerArray.append(epicentersAvgList[1][i][1])
+
+    #NorthSouth
+    southArray = []
+    northSouthDiflist = []
+    northSouthCompDict = {}
+    for i in range(len(epicentersAvgList[2])):
+        southArray.append(epicentersAvgList[2][i][1])
+
+    #centerSouth
+    centerSouthDifList =  []
+    centerSouthCompDict = {}
+
+
+    ##
+    for counter in range(len(northArray)):
+        northCenterDifList.append(abs(northArray[counter] - centerArray[counter]))
+        northSouthDiflist.append(abs(northArray[counter] - southArray[counter]))
+        centerSouthDifList.append(abs(centerArray[counter] - southArray[counter]))
+
+    counter = 0
+    #the keys for all three dictionaries are the same
+    for i in range(len(epicentersAvgList[0])):
+        northCenterCompDict[epicentersAvgList[0][i][0]] = northCenterDifList[counter]
+        northSouthCompDict[epicentersAvgList[0][i][0]] = northSouthDiflist[counter]
+        centerSouthCompDict[epicentersAvgList[0][i][0]] = centerSouthDifList[counter]
+        counter += 1
+
+    difDictsList.append(northCenterCompDict)
+    difDictsList.append(northSouthCompDict)
+    difDictsList.append(centerSouthCompDict)
+
+    return difDictsList
+
+
+
+
+
+
+
+"""
+Requires: listDifferences is a list of three distinct dictionaries, each dictionary "comparing" two different epicenters and has
+        as key the hour and as value the difference in avg temp for that hour between both epicenters.
+        listNames is a list containing the names of the epicenters being compared (NorteCentro,NorteSur,CentroSur)
+Modifies: nothing
+Effects: outputs to a txt file the three dictionaries, one below the other.
+"""
+
+def outputDiferences(listDifferences,listNames,dictList):
+
+    print("GOT HERE")
+
+    with open("epicenterDifferences.txt","w") as diftxt:
+        for i in range(len(dictList[0])):
+            diftxt.write(dictList[0][i][0] + "," + str(dictList[0][i][1]) + "\n")
+
+        diftxt.write("\n" + "#######" + "\n")
+
+        for i in range(len(dictList[1])):
+            diftxt.write(dictList[1][i][0] + "," + str(dictList[1][i][1]) + "\n")
+
+        diftxt.write("\n" + "#######" + "\n")
+
+        for i in range(len(dictList[2])):
+            diftxt.write(dictList[2][i][0] + "," + str(dictList[2][i][1]) + "\n")
+
+        diftxt.write("\n" + "#######" + "\n")
+
+        counter = 0
+        for i in range(len(listDifferences)):
+            diftxt.write(listNames[counter] + "\n")
+            for key in listDifferences[i]:
+                diftxt.write(key + "," + str(listDifferences[i][key]))
+                diftxt.write("\n")
+            counter += 1
+
+
+
+
+
 
 
 def main():
@@ -335,11 +475,9 @@ def main():
 
     timeMachineReq = timeMachineRequest()
     timeMachineReq.makeRequests()
-    timeMachineReq.reformatDicts()
     timeMachineReq.outputAsCSV()
 
-    req = ApiRequest()
-    req.TESTRounding()
+    req = ApiRequest(18.9261000,-99.2307500)
 
     #print(req.next168Hours)
     pred = Prediction(req)
@@ -355,7 +493,21 @@ def main():
     plt.savefig("predictionGraph.png")
 
     #creating the csvFile
-    csvOutput(pred, req)
+    csvOutput(pred)
+
+
+    #differenceForEpicenters (Cuernavaca)
+    northCoords = [18.949838,-99.228064]
+    centerCoords = [18.890503,-99.174469]
+    southCoords = [18.825054,-99.229645]
+    coordList = [northCoords,centerCoords,southCoords]
+
+    dictList = compareEpicenters(coordList)
+    difDictList = takeDif(dictList)
+
+
+    namesList = ["NorteCentro","NorteSur","CentroSur"]
+    outputDiferences(difDictList,namesList,dictList)
 
 
 if __name__ == '__main__':
